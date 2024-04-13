@@ -8,6 +8,12 @@ CREATE TABLE "Users" (
   "role" VARCHAR(255) NOT NULL
 );
 
+CREATE TABLE "Admins" (
+  "user_id" INTEGER,
+  "admin_id" SERIAL PRIMARY KEY,
+  FOREIGN KEY ("user_id") REFERENCES "Users"("user_id")
+);
+
 CREATE TABLE "Members" (
   "user_id" INTEGER,
   "member_id" SERIAL PRIMARY KEY,
@@ -20,6 +26,14 @@ CREATE TABLE "Members" (
   FOREIGN KEY ("user_id") REFERENCES "Users"("user_id")
 );
 
+CREATE TABLE "Trainers" (
+  "user_id" INTEGER,
+  "trainer_id" SERIAL PRIMARY KEY,
+  "first_name" VARCHAR(255) NOT NULL,
+  "last_name" VARCHAR(255) NOT NULL,
+  FOREIGN KEY ("user_id") REFERENCES "Users"("user_id")
+);
+
 CREATE TABLE "Health" (
   "health_id" SERIAL PRIMARY KEY,
   "member_id" INTEGER,
@@ -29,14 +43,6 @@ CREATE TABLE "Health" (
   FOREIGN KEY ("member_id") REFERENCES "Members"("member_id")
 );
 
-CREATE TABLE "Trainers" (
-  "user_id" INTEGER,
-  "trainer_id" SERIAL PRIMARY KEY,
-  "first_name" VARCHAR(255) NOT NULL,
-  "last_name" VARCHAR(255) NOT NULL,
-  FOREIGN KEY ("user_id") REFERENCES "Users"("user_id")
-);
-
 CREATE TABLE "Dates" (
   "date_id" SERIAL PRIMARY KEY,
   "trainer_id" INTEGER,
@@ -44,28 +50,10 @@ CREATE TABLE "Dates" (
   FOREIGN KEY ("trainer_id") REFERENCES "Trainers"("trainer_id")
 );
 
-CREATE TABLE "Admins" (
-  "user_id" INTEGER,
-  "admin_id" SERIAL PRIMARY KEY,
-  FOREIGN KEY ("user_id") REFERENCES "Users"("user_id")
-);
-
 CREATE TABLE "Rooms" (
   "room_id" SERIAL PRIMARY KEY,
   "room_type" TEXT NOT NULL,
   "maintenance" TEXT
-);
-
-CREATE TABLE "Sessions" (
-  "session_id" SERIAL PRIMARY KEY,
-  "member_id" INTEGER,
-  "trainer_id" INTEGER NOT NULL,
-  "room_id" INTEGER NOT NULL,
-  "session_date" TIMESTAMP NOT NULL,
-  "session_details" TEXT,
-  FOREIGN KEY ("member_id") REFERENCES "Members"("member_id"),
-  FOREIGN KEY ("trainer_id") REFERENCES "Trainers"("trainer_id"),
-  FOREIGN KEY ("room_id") REFERENCES "Rooms"("room_id")
 );
 
 CREATE TABLE "Classes" (
@@ -85,4 +73,16 @@ CREATE TABLE "ClassQueue" (
   UNIQUE ("member_id", "event_id"),
   FOREIGN KEY ("member_id") REFERENCES "Members"("member_id"),
   FOREIGN KEY ("event_id") REFERENCES "Classes"("event_id")
+);
+
+CREATE TABLE "Sessions" (
+  "session_id" SERIAL PRIMARY KEY,
+  "member_id" INTEGER,
+  "trainer_id" INTEGER NOT NULL,
+  "room_id" INTEGER NOT NULL,
+  "session_date" TIMESTAMP NOT NULL,
+  "session_details" TEXT,
+  FOREIGN KEY ("member_id") REFERENCES "Members"("member_id"),
+  FOREIGN KEY ("trainer_id") REFERENCES "Trainers"("trainer_id"),
+  FOREIGN KEY ("room_id") REFERENCES "Rooms"("room_id")
 );

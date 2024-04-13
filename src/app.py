@@ -1,184 +1,122 @@
-from psycopg2 import connect, Error
+# Health and Fitness Club Management System
+# Jerick Liu
+# 101225819
+# Final project submission for COMP 3005: Database Management Systems
+
 import sys
+from getpass import getpass
+from psycopg2 import connect, Error
 from Functions import Functions
 from menu import Menu
 from datetime import datetime
 
 db = {}
 
-def register_user():
-    try:
-        # Establish database connection
-        conn = connect(**db)
-        cur = conn.cursor()
+def initialize():
+    pg_connection = connect(**db)
+    pg_cursor = pg_connection.cursor()
 
-        Functions.clearScreen("Register")
+    # Open the SQL file
+    with open('./SQL/DDL.sql', 'r') as DDL:
+        pg_cursor.execute(DDL.read())
 
-        print("\nNOTE: If you are trying to register a trainer or admin account, please speak with your representative.\n")
+    with open('./SQL/DML.sql', 'r') as DML:
+        pg_cursor.execute(DML.read())
 
-        # Collect user information
-        username = input("Enter username: ")
-        password = input("Enter password: ")
-        email = input("Enter email: ")
-        first_name = input("Enter first name: ")
-        last_name = input("Enter last name: ")
-        fitness_goals = input("Enter fitness goals: ")
-        exercise = input("Enter exercise routine: ")
-        blood = input("Enter blood pressure: ")
-        weight = Functions.loopTillValid("Enter weight (kg): ", "integer", False)
-        height = Functions.loopTillValid("Enter height (cm): ", "integer", False)
+    # Commit and close
+    pg_cursor.close()
+    pg_connection.commit()
+    pg_connection.close()
 
-        # Insert into Users table
-        cur.execute("""
-            INSERT INTO "Users" (username, password, email, user_type) 
-            VALUES (%s, %s, %s, 'member') RETURNING user_id
-        """, (username, password, email))
-        user_id = cur.fetchone()[0]
-
-        # Insert into Members table
-        cur.execute("""
-            INSERT INTO "Members" (user_id, first_name, last_name, fitness_goals, exercise, balance) 
-            VALUES (%s, %s, %s, %s, %s, 0, 0)
-        """, (user_id, first_name, last_name, fitness_goals, exercise))
-
-        # Get the generated member_id for health metrics
-        cur.execute("SELECT member_id FROM \"Members\" WHERE user_id = %s", (user_id,))
-        member_id = cur.fetchone()[0]
-
-        # Insert into Health table
-        cur.execute("""
-            INSERT INTO "Health" (member_id, blood, weight, height) 
-            VALUES (%s, %s, %s, %s)
-        """, (member_id, blood, weight, height))
-
-        conn.commit()
-        print("You have successfully registered!")
-
-        Functions.enterToContinue()
-
-    except Exception as e:
-        print("Registration failed: " + str(e))
-        Functions.enterToContinue()
-        conn.rollback()
-
-    finally:
-        cur.close()
-        conn.close()
-
-def login():
-
-    Functions.clearScreen("Health and Fitness Management System Login")
-    username = input("Enter your username: ")
-    password = input("Enter your password: ")
-
-    conn = connect(**db)
-    try:
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM \"Users\" WHERE username = %s AND password = %s", (username, password))
-        
-        if r:= cur.fetchone():
-            match r[4]:
-                case "admin":
-                    admin_page()
-                case "member":
-                    member_page(r[0])
-                case "trainer":
-                    trainer_page(r[0])
-
-            return True
-        else:
-            print("Invalid username or password")
-            Functions.enterToContinue()
-            return False
-    finally:
-        cur.close()
-        conn.close()
-
-def admin_page():
-    conn = connect(**db)
-    cur = conn.cursor()
+def admin_login():
+    pg_connection = connect(**db)
+    pg_cursor = pg_connection.cursor()
     
-    exit = False
+    try:
+        exit = False
 
-    while not exit:
+        while not exit:
 
-        Functions.clearScreen("Admin Dashboard")
+            Functions.clearScreen("Admin Dashboard")
 
-        # Populate events listbox
-        cur.execute("SELECT * FROM \"Classes\"")
-        events = cur.fetchall()
-        print("\nUpcoming Classes:")
-        if events:
-            for event in events:
-                # Fetch the trainer name and room using the trainer ID and room ID
-                cur.execute("""
-                SELECT u.username 
-                FROM "Users" u
-                JOIN "Trainers" t ON u.user_id = t.user_id
-                WHERE t.trainer_id = %s
-                """, (event[4],))
-                trainer_name = cur.fetchone()[0]
-                cur.execute("SELECT room_type FROM \"Rooms\" WHERE room_id = %s", (event[5],))
-                room_name = cur.fetchone()[0]
+            # Populate events listbox
+            pg_cursor.execute("SELECT * FROM \"Classes\"")
+            events = pg_cursor.fetchall()
+            print("\nUpcoming Classes:")
+            if events:
+                for event in events:
+                    # Fetch the trainer name and room using the trainer ID and room ID
+                    pg_cursor.execute("""
+                    SELECT u.username 
+                    FROM "Users" u
+                    JOIN "Trainers" t ON u.user_id = t.user_id
+                    WHERE t.trainer_id = %s
+                    """, (event[4],))
+                    trainer_name = pg_cursor.fetchone()[0]
+                    pg_cursor.execute("SELECT room_type FROM \"Rooms\" WHERE room_id = %s", (event[5],))
+                    room_name = pg_cursor.fetchone()[0]
 
-                # Count the number of members attending the event
-                cur.execute("SELECT COUNT(*) FROM \"ClassQueue\" WHERE event_id = %s", (event[0],))
-                member_count = cur.fetchone()[0]
+                    # Count the number of members attending the event
+                    pg_cursor.execute("SELECT COUNT(*) FROM \"ClassQueue\" WHERE event_id = %s", (event[0],))
+                    member_count = pg_cursor.fetchone()[0]
 
-                print(f"{event[1]}\n\t Trainer: {trainer_name}\n\t Date: {event[2]}\n\t Description: {event[3]}\n\t Current Attendance: {member_count}.")
-        else:
-            print("There are no scheduled Classes.")
+                    print(f"{event[1]}\n\t Trainer: {trainer_name}\n\t Date: {event[2]}\n\t Description: {event[3]}\n\t Current Attendance: {member_count}.")
+            else:
+                print("There are no scheduled Classes.")
 
-        print("\nRooms:")
-        # Populate rooms listbox
-        cur.execute("SELECT room_id, room_type FROM \"Rooms\" ORDER BY room_id")
-        rooms = cur.fetchall()
-        for room in rooms:
-            print(f"{room[1]} (ID: {room[0]})")
+            print("\nRooms:")
+            # Populate rooms listbox
+            pg_cursor.execute("SELECT room_id, room_type FROM \"Rooms\" ORDER BY room_id")
+            rooms = pg_cursor.fetchall()
+            for room in rooms:
+                print(f"{room[1]} (ID: {room[0]})")
 
-        # Query database for first name, last name, and billing info from all members
-        cur.execute("""
-        SELECT m.user_id, m.first_name, m.last_name, m.balance
-        FROM "Members" m
-        """)
-        balances = cur.fetchall()
+            # Query database for first name, last name, and billing info from all members
+            pg_cursor.execute("""
+            SELECT m.user_id, m.first_name, m.last_name, m.balance
+            FROM "Members" m
+            ORDER BY m.user_id
+            """)
+            balances = pg_cursor.fetchall()
 
-        print("\nMember Balances:")
-        for balance in balances:
-            print(f"{balance[1]} {balance[2]} (ID: {balance[0]}): ${balance[3]:,.2f}")
-        
-        adminChoice = Menu("", "Process Member Payment", "Manage Rooms", "Schedule new Event", "Update Event Time", "Delete an Event", "Logout").menu(False)
+            print("\nMember Balances:")
+            for balance in balances:
+                print(f"{balance[1]} {balance[2]} (ID: {balance[0]}): ${balance[3]:,.2f}")
+            
+            adminChoice = Menu("", "Process Member Payment", "Manage Rooms", "Schedule new Event", "Update Event Time", "Delete an Event", "Logout").menu(False)
 
-        match adminChoice:
-            case "1":
-                process_payments(conn)
-            case "2":
-                manage_rooms(conn)
-            case "3":
-                scheduleEvent(conn)
-            case "4":
-                update_event_time(conn)
-            case "5":
-                delete_event(conn)
-            case "6":
-                exit = True
-
-
-    cur.close()
-    conn.close()
+            match adminChoice:
+                case "1":
+                    process_payments(pg_connection)
+                case "2":
+                    manage_rooms(pg_connection)
+                case "3":
+                    admin_book_event(pg_connection)
+                case "4":
+                    update_event_time(pg_connection)
+                case "5":
+                    admin_del_event(pg_connection)
+                case "6":
+                    exit = True
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        Functions.enterToContinue()
+    finally:
+        pg_cursor.close()
+        pg_connection.close()
 
 from decimal import Decimal as float
-def process_payments(conn):
-    cur = conn.cursor()
+def process_payments(pg_connection):
+    pg_cursor = pg_connection.cursor()
 
     try:
         # Display all members with outstanding fees
-        cur.execute("""
-            SELECT member_id, first_name || ' ' || last_name AS full_name, balance
+        pg_cursor.execute("""
+            SELECT member_id, first_name, last_name, balance
             FROM "Members"
             WHERE balance > 0
         """)
-        outstanding_fees = cur.fetchall()
+        outstanding_fees = pg_cursor.fetchall()
 
         if not outstanding_fees:
             print("No outstanding fees to process.")
@@ -187,7 +125,9 @@ def process_payments(conn):
 
         print("\nMembers with Outstanding Fees:")
         for idx, fee in enumerate(outstanding_fees):
-            print(f"{idx + 1}. {fee[1]}, Owed: ${fee[2]:.2f}")
+            # Combine first name and last name in Python
+            full_name = f"{fee[1]} {fee[2]}"
+            print(f"{idx + 1}. {full_name}, Owed: ${fee[3]:.2f}")
 
         # Select a member to process payment
         member_number = int(input("\nEnter the number of the member to process payment for: ")) - 1
@@ -198,30 +138,30 @@ def process_payments(conn):
         amount_paid = float(input("Enter the amount being paid: "))
 
         # Process the payment
-        cur.execute("""
+        pg_cursor.execute("""
             UPDATE "Members"
             SET balance = balance - %s
             WHERE member_id = %s
         """, (amount_paid, member_id))
 
-        conn.commit()
+        pg_connection.commit()
         print("Payment processed successfully.")
         Functions.enterToContinue()
 
     except Exception as e:
         print(f"An error occurred: {e}")
         Functions.enterToContinue()
-        conn.rollback()
+        pg_connection.rollback()
     finally:
-        cur.close()
+        pg_cursor.close()
 
-def manage_rooms(conn):
-    cur = conn.cursor()
+def manage_rooms(pg_connection):
+    pg_cursor = pg_connection.cursor()
 
     try:
         # Display current maintenance of all rooms
-        cur.execute("SELECT * FROM \"Rooms\"")
-        rooms = cur.fetchall()
+        pg_cursor.execute("SELECT * FROM \"Rooms\"")
+        rooms = pg_cursor.fetchall()
 
         print("\nCurrent Room Maintenance:")
         for idx, room in enumerate(rooms):
@@ -237,26 +177,25 @@ def manage_rooms(conn):
         new_status = input("Enter new status for the room: ")
 
         # Update the status of the selected room
-        cur.execute("""
+        pg_cursor.execute("""
             UPDATE "Rooms"
             SET maintenance = %s
             WHERE room_id = %s
         """, (new_status, room_id))
 
-        conn.commit()
+        pg_connection.commit()
         print("Room maintenance updated successfully.")
         Functions.enterToContinue()
 
     except Exception as e:
         print(f"An error occurred: {e}")
         Functions.enterToContinue()
-        conn.rollback()
+        pg_connection.rollback()
     finally:
-        cur.close()
+        pg_cursor.close()
 
-# Create a class as an admin
-def scheduleEvent(conn):
-    cur = conn.cursor()
+def admin_book_event(pg_connection):
+    pg_cursor = pg_connection.cursor()
 
     try:
         # Get event details from admin input
@@ -275,60 +214,59 @@ def scheduleEvent(conn):
         room_id = input("Enter room ID: ")
 
         # Start a transaction
-        cur.execute("BEGIN;")
+        pg_cursor.execute("BEGIN;")
 
         # Check for trainer availability on the given date
-        cur.execute("""
+        pg_cursor.execute("""
             SELECT date_id FROM "Dates"
             WHERE trainer_id = %s AND availability = %s
         """, (trainer_id, event_date))
-        availability = cur.fetchone()
+        availability = pg_cursor.fetchone()
 
         if availability is None:
             print("Error: Trainer is not available on this date.")
             Functions.enterToContinue()
-            cur.execute("ROLLBACK;")
+            pg_cursor.execute("ROLLBACK;")
             return
         
         else:
             date_id = availability[0]
 
             # Insert the new group event
-            cur.execute("""
+            pg_cursor.execute("""
                 INSERT INTO "Classes"
                 (event_name, event_date, event_description, trainer_id, room_id)
                 VALUES (%s, %s, %s, %s, %s)
             """, (event_name, event_date, event_description, trainer_id, room_id))
 
             # Delete the matched availability
-            cur.execute("""
+            pg_cursor.execute("""
                 DELETE FROM "Dates"
                 WHERE date_id = %s
             """, (date_id,))
 
             # Commit the transaction
-            cur.execute("COMMIT;")
+            pg_cursor.execute("COMMIT;")
             print("Success: Event created and trainer availability updated.")
             Functions.enterToContinue()
 
     except Error as e:
         print("An error occurred: ", e)
         Functions.enterToContinue()
-        cur.execute("ROLLBACK;")
+        pg_cursor.execute("ROLLBACK;")
     finally:
-        cur.close()
+        pg_cursor.close()
 
-# Delete a group event as an admin
-def delete_event(conn):
+def admin_del_event(pg_connection):
 
-    cur = conn.cursor()
+    pg_cursor = pg_connection.cursor()
 
     try:
         # Display all current events
-        cur.execute("""
+        pg_cursor.execute("""
             SELECT event_id, event_name, event_date, event_description FROM "Classes"
         """)
-        events = cur.fetchall()
+        events = pg_cursor.fetchall()
 
         if not events:
             print("No events available to delete.")
@@ -348,30 +286,30 @@ def delete_event(conn):
             return
 
         # Delete the selected event
-        cur.execute("""
+        pg_cursor.execute("""
             DELETE FROM "Classes"
             WHERE event_id = %s
         """, (event_id_to_delete,))
-        conn.commit()
+        pg_connection.commit()
         print(f"Event with ID {event_id_to_delete} has been deleted successfully.")
         Functions.enterToContinue()
 
     except Exception as e:
         print(f"An error occurred: {e}")
         Functions.enterToContinue()
-        conn.rollback()
+        pg_connection.rollback()
     finally:
-        cur.close()
+        pg_cursor.close()
 
-def update_event_time(conn):
-    cur = conn.cursor()
+def update_event_time(pg_connection):
+    pg_cursor = pg_connection.cursor()
 
     try:
         # Display all current events
-        cur.execute("""
+        pg_cursor.execute("""
             SELECT event_id, event_name, event_date, trainer_id FROM "Classes"
         """)
-        events = cur.fetchall()
+        events = pg_cursor.fetchall()
 
         if not events:
             print("No events available to update.")
@@ -402,11 +340,11 @@ def update_event_time(conn):
         new_time = new_date.strftime('%Y-%m-%d %H:%M:%S')
 
         # Check if the trainer is available at the new time
-        cur.execute("""
+        pg_cursor.execute("""
             SELECT date_id FROM "Dates"
             WHERE trainer_id = %s AND availability = %s
         """, (selected_event[3], new_time))
-        availability = cur.fetchone()
+        availability = pg_cursor.fetchone()
 
         if not availability:
             print("Trainer is not available at the new time.")
@@ -414,12 +352,12 @@ def update_event_time(conn):
             return
 
         # Update the event time
-        cur.execute("""
+        pg_cursor.execute("""
             UPDATE "Classes"
             SET event_date = %s
             WHERE event_id = %s
         """, (new_time, event_id_to_update))
-        conn.commit()
+        pg_connection.commit()
         print(f"Event time updated successfully to {new_time}.")
 
         Functions.enterToContinue()
@@ -427,21 +365,21 @@ def update_event_time(conn):
     except Exception as e:
         print(f"An error occurred: {e}")
         Functions.enterToContinue()
-        conn.rollback()
+        pg_connection.rollback()
     finally:
-        cur.close()
+        pg_cursor.close()
 
-def member_page(user_id):
-    conn = connect(**db)
+def member_login(user_id):
+    pg_connection = connect(**db)
 
-    cur = conn.cursor()
-    cur.execute("SELECT member_id FROM \"Members\" WHERE user_id = %s", (user_id,))
-    member_id = cur.fetchone()[0]
+    pg_cursor = pg_connection.cursor()
+    pg_cursor.execute("SELECT member_id FROM \"Members\" WHERE user_id = %s", (user_id,))
+    member_id = pg_cursor.fetchone()[0]
     exit = False
 
     while not exit:
-        cur.execute("SELECT * FROM \"Members\" WHERE member_id = %s", (member_id,))
-        member_details = cur.fetchone()
+        pg_cursor.execute("SELECT * FROM \"Members\" WHERE member_id = %s", (member_id,))
+        member_details = pg_cursor.fetchone()
 
         Functions.clearScreen(f"{member_details[2]}'s Profile")
 
@@ -457,7 +395,7 @@ def member_page(user_id):
         print(f"{labels[6] + ':':<{max_length}} ${member_details[7]:,.2f}\n\n")  # Formatted as currency
         
         # Fetch sessions
-        cur.execute("""
+        pg_cursor.execute("""
         SELECT s.session_id, s.trainer_id, s.session_date, s.session_details, u.username, r.room_type as room_name
         FROM "Sessions" s
         JOIN "Trainers" t ON s.trainer_id = t.trainer_id
@@ -465,7 +403,7 @@ def member_page(user_id):
         JOIN "Rooms" r ON s.room_id = r.room_id
         WHERE s.member_id = %s
         """, (member_id,))
-        sessions = cur.fetchall()
+        sessions = pg_cursor.fetchall()
 
 
         print("Your Registered Training Sessions:")
@@ -477,32 +415,32 @@ def member_page(user_id):
         
 
         # Fetch health metrics
-        cur.execute("SELECT * FROM \"Health\" WHERE member_id = %s", (member_id,))
-        health_metrics = cur.fetchall()
+        pg_cursor.execute("SELECT * FROM \"Health\" WHERE member_id = %s", (member_id,))
+        health_metrics = pg_cursor.fetchall()
 
         print("\nHealth Metrics:")
         for metric in health_metrics:
             print(f"Blood Pressure: {metric[2]}\nWeight: {metric[3]}kg \nHeight: {metric[4]}cm")
 
         # Events section
-        cur.execute("SELECT * FROM \"Classes\"")
-        events = cur.fetchall()
+        pg_cursor.execute("SELECT * FROM \"Classes\"")
+        events = pg_cursor.fetchall()
         print("\nUpcoming Classes:")
         for event in events:
             # Fetch the trainer name and room using the trainer ID and room ID
-            cur.execute("""
+            pg_cursor.execute("""
             SELECT u.username 
             FROM "Users" u
             JOIN "Trainers" t ON u.user_id = t.user_id
             WHERE t.trainer_id = %s
             """, (event[4],))
-            trainer_name = cur.fetchone()[0]
-            cur.execute("SELECT room_type FROM \"Rooms\" WHERE room_id = %s", (event[5],))
-            room_name = cur.fetchone()[0]
+            trainer_name = pg_cursor.fetchone()[0]
+            pg_cursor.execute("SELECT room_type FROM \"Rooms\" WHERE room_id = %s", (event[5],))
+            room_name = pg_cursor.fetchone()[0]
 
             # Count the number of members attending the event
-            cur.execute("SELECT COUNT(*) FROM \"ClassQueue\" WHERE event_id = %s", (event[0],))
-            member_count = cur.fetchone()[0]
+            pg_cursor.execute("SELECT COUNT(*) FROM \"ClassQueue\" WHERE event_id = %s", (event[0],))
+            member_count = pg_cursor.fetchone()[0]
 
             print(f"{event[1]}\n\t Trainer: {trainer_name}\n\t Date: {event[2]}\n\t Description: {event[3]}\n\t Current Attendance: {member_count}.")
 
@@ -510,41 +448,48 @@ def member_page(user_id):
 
         match memberChoice:
             case "1":
-                update_personal(user_id)
+                mod_info(user_id)
             case "2":
-                update_health_metrics(user_id)
+                mod_health(user_id)
             case "3":
-                schedule_page(member_id)
+                book_training(member_id)
             case "4":
-                cancel_session(member_id)
+                cancel_training(member_id)
             case "5":
-                register_for_event(member_id)
+                event_registration(member_id)
             case "6":
-                pay_bills(member_id)
+                member_process_payment(member_id)
             case "7":
                 exit = True
 
-    cur.close()
-    conn.close()
+    pg_cursor.close()
+    pg_connection.close()
 
-def schedule_page(member_id):
+def book_training(member_id):
     # Connect to the database
-    conn = connect(**db)
-    cur = conn.cursor()
+    pg_connection = connect(**db)
+    pg_cursor = pg_connection.cursor()
 
     try:
-        # Fetch available dates
-        cur.execute("SELECT date_id, availability, trainer_id FROM \"Dates\" ORDER BY availability")
-        dates = cur.fetchall()
+        pg_cursor.execute("""
+        SELECT d.date_id, d.availability, t.trainer_id, t.first_name, t.last_name 
+        FROM "Dates" d
+        JOIN "Trainers" t ON d.trainer_id = t.trainer_id
+        JOIN "Users" u ON t.user_id = u.user_id
+        ORDER BY d.availability
+        """)
+        dates = pg_cursor.fetchall()
 
         if not dates:
             print("No available dates to schedule.")
+            Functions.enterToContinue()
             return
         
         print("\nAvailable Dates for Training Sessions:")
         for i, date in enumerate(dates, start=1):
             formatted_date = date[1].strftime('%Y-%m-%d %H:%M:%S')
-            print(f"{i}. Date ID: {date[0]}, Date: {formatted_date}")
+            trainer_name = f"{date[3]} {date[4]}"
+            print(f"{i}. Date: {formatted_date}, Trainer: {trainer_name}")
 
         # User selects a date
         choice = int(input("Enter the number corresponding to the date you wish to schedule: ")) - 1
@@ -562,38 +507,38 @@ def schedule_page(member_id):
     except Error as e:
         print(f"An error occurred: {e}")
         Functions.enterToContinue()
-        conn.rollback()
+        pg_connection.rollback()
     except ValueError:
         print("Invalid input. Please enter a valid number.")
         Functions.enterToContinue()
-        conn.rollback()
+        pg_connection.rollback()
     finally:
-        cur.close()
-        conn.close()
+        pg_cursor.close()
+        pg_connection.close()
 
 def schedule_session(member_id, date_id):
-    conn = connect(**db)
-    cur = conn.cursor()
+    pg_connection = connect(**db)
+    pg_cursor = pg_connection.cursor()
 
     try:
         # Fetch the selected date details
-        cur.execute("SELECT trainer_id, availability FROM \"Dates\" WHERE date_id = %s", (date_id,))
-        trainer_id, trainer_availability = cur.fetchone()
+        pg_cursor.execute("SELECT trainer_id, availability FROM \"Dates\" WHERE date_id = %s", (date_id,))
+        trainer_id, trainer_availability = pg_cursor.fetchone()
 
         # Schedule the session
-        cur.execute("INSERT INTO \"Sessions\" (member_id, trainer_id, room_id, session_date) VALUES (%s, %s, %s, %s)",
+        pg_cursor.execute("INSERT INTO \"Sessions\" (member_id, trainer_id, room_id, session_date) VALUES (%s, %s, %s, %s)",
                     (member_id, trainer_id, 1, trainer_availability))
-        conn.commit()
+        pg_connection.commit()
         print(f"\nSession Scheduled Successfully on {trainer_availability.strftime('%Y-%m-%d %H:%M:%S')}")
 
         # Update billing info
-        cur.execute("SELECT balance FROM \"Members\" WHERE member_id = %s", (member_id,))
+        pg_cursor.execute("SELECT balance FROM \"Members\" WHERE member_id = %s", (member_id,))
 
-        newBill = (cur.fetchone()[0] or float(0)) + 20
+        newBill = (pg_cursor.fetchone()[0] or float(0)) + 20
 
-        cur.execute("UPDATE \"Members\" SET balance = %s WHERE member_id = %s", (newBill, member_id))
+        pg_cursor.execute("UPDATE \"Members\" SET balance = %s WHERE member_id = %s", (newBill, member_id))
 
-        conn.commit()
+        pg_connection.commit()
 
         print(f"Billing updated: New bill is ${newBill}.")
 
@@ -602,19 +547,19 @@ def schedule_session(member_id, date_id):
     except Error as e:
         print(f"An error occurred: {e}")
         Functions.enterToContinue()
-        conn.rollback()
+        pg_connection.rollback()
     finally:
-        cur.close()
-        conn.close()
+        pg_cursor.close()
+        pg_connection.close()
 
-def cancel_session(member_id):
+def cancel_training(member_id):
     # Connect to the database
-    conn = connect(**db)
-    cur = conn.cursor()
+    pg_connection = connect(**db)
+    pg_cursor = pg_connection.cursor()
 
     try:
         # Fetch the member's sessions
-        cur.execute("""
+        pg_cursor.execute("""
             SELECT s.session_id, s.session_date, u.username, r.room_type, s.session_details
             FROM "Sessions" s
             JOIN "Trainers" t ON s.trainer_id = t.trainer_id
@@ -622,7 +567,7 @@ def cancel_session(member_id):
             JOIN "Rooms" r ON s.room_id = r.room_id
             WHERE s.member_id = %s
         """, (member_id,))
-        sessions = cur.fetchall()
+        sessions = pg_cursor.fetchall()
 
         # Check if sessions exist
         if not sessions:
@@ -645,68 +590,69 @@ def cancel_session(member_id):
 
         # Cancel the selected session
         session_to_cancel = sessions[choice]
-        cur.execute("DELETE FROM \"Sessions\" WHERE session_id = %s", (session_to_cancel[0],))
-        conn.commit()
+        pg_cursor.execute("DELETE FROM \"Sessions\" WHERE session_id = %s", (session_to_cancel[0],))
+        pg_connection.commit()
 
         # Update billing information to reflect the refund
-        cur.execute("""
+        pg_cursor.execute("""
             UPDATE "Members"
             SET balance = balance - 20.00
             WHERE member_id = %s
         """, (member_id,))
-        conn.commit()
+        pg_connection.commit()
 
         print(f"\nSession cancelled successfully. $20 has been credited to the member's account.")
         Functions.enterToContinue()
 
     except Exception as e:
         print(f"An error occurred: {e}")
-        conn.rollback()
+        pg_connection.rollback()
     finally:
-        cur.close()
-        conn.close()
+        pg_cursor.close()
+        pg_connection.close()
 
 
-def pay_bills(member_id):
-    conn = connect(**db)  # Ensure db is properly defined with your connection parameters
-    cur = conn.cursor()
+def member_process_payment(member_id):
+    pg_connection = connect(**db)  # Ensure db is properly defined with your connection parameters
+    pg_cursor = pg_connection.cursor()
 
     try:
         # Query for the current billing information
-        cur.execute("SELECT balance FROM \"Members\" WHERE member_id = %s", (member_id,))
-        balance = cur.fetchone()
+        pg_cursor.execute("SELECT balance FROM \"Members\" WHERE member_id = %s", (member_id,))
+        balance = pg_cursor.fetchone()
 
         if balance:
             print("\nCurrent outstanding bill amount: ${:.2f}".format(balance[0]))
 
             # Update the balance for the current member to $0.00
-            cur.execute("UPDATE \"Members\" SET balance = 0.00 WHERE member_id = %s", (member_id,))
-            conn.commit()
+            pg_cursor.execute("UPDATE \"Members\" SET balance = 0.00 WHERE member_id = %s", (member_id,))
+            pg_connection.commit()
 
             print("\nThank you for your payment. Your bill has been cleared.")
         else:
             print("\nNo billing information found for the given member ID.")
 
     except Exception as e:
-        print("An error occurred:", e)
-        conn.rollback()
+        print(f"An error occurred: {e}")
+        Functions.enterToContinue()
+        pg_connection.rollback()
     
     finally:
-        cur.close()
-        conn.close()
+        pg_cursor.close()
+        pg_connection.close()
 
     Functions.enterToContinue()
 
 
-def update_personal(user_id):
+def mod_info(user_id):
     # Connect to the database
-    conn = connect(**db)
-    cur = conn.cursor()
+    pg_connection = connect(**db)
+    pg_cursor = pg_connection.cursor()
 
     try:
         # Retrieve the current details of the member
-        cur.execute("SELECT * FROM \"Members\" WHERE user_id = %s", (user_id,))
-        member_details = cur.fetchone()
+        pg_cursor.execute("SELECT * FROM \"Members\" WHERE user_id = %s", (user_id,))
+        member_details = pg_cursor.fetchone()
 
         # If no member is found
         if not member_details:
@@ -734,8 +680,8 @@ def update_personal(user_id):
 
         # Update the database
         sql_update = f"UPDATE \"Members\" SET \"{labels[choice].replace(' ', '_').lower()}\" = %s WHERE user_id = %s"
-        cur.execute(sql_update, (new_value, user_id))
-        conn.commit()
+        pg_cursor.execute(sql_update, (new_value, user_id))
+        pg_connection.commit()
 
         print(f"\n{labels[choice]} updated successfully.")
         Functions.enterToContinue()
@@ -743,26 +689,26 @@ def update_personal(user_id):
     except Exception as e:
         print(f"An error occurred: {e}")
         Functions.enterToContinue()
-        conn.rollback()
+        pg_connection.rollback()
     finally:
-        cur.close()
-        conn.close()
+        pg_cursor.close()
+        pg_connection.close()
 
-def update_health_metrics(user_id):
+def mod_health(user_id):
     # Connect to the database
-    conn = connect(**db)
-    cur = conn.cursor()
+    pg_connection = connect(**db)
+    pg_cursor = pg_connection.cursor()
 
     try:
         # Retrieve the current health metrics of the member
-        cur.execute("SELECT member_id FROM \"Members\" WHERE user_id = %s", (user_id,))
-        member_id = cur.fetchone()
+        pg_cursor.execute("SELECT member_id FROM \"Members\" WHERE user_id = %s", (user_id,))
+        member_id = pg_cursor.fetchone()
         if not member_id:
             print("No member found with the given user ID.")
             return
 
-        cur.execute("SELECT * FROM \"Health\" WHERE member_id = %s", (member_id[0],))
-        health_metrics = cur.fetchone()
+        pg_cursor.execute("SELECT * FROM \"Health\" WHERE member_id = %s", (member_id[0],))
+        health_metrics = pg_cursor.fetchone()
 
         # If no metrics are found
         if not health_metrics:
@@ -794,8 +740,8 @@ def update_health_metrics(user_id):
 
         # Update the database
         sql_update = f"UPDATE \"Health\" SET {column_name} = %s WHERE member_id = %s"
-        cur.execute(sql_update, (new_value, member_id[0]))
-        conn.commit()
+        pg_cursor.execute(sql_update, (new_value, member_id[0]))
+        pg_connection.commit()
 
         print(f"\n{labels[choice]} updated successfully.")
         Functions.enterToContinue()
@@ -803,20 +749,20 @@ def update_health_metrics(user_id):
     except Exception as e:
         print(f"An error occurred: {e}")
         Functions.enterToContinue()
-        conn.rollback()
+        pg_connection.rollback()
     finally:
-        cur.close()
-        conn.close()
+        pg_cursor.close()
+        pg_connection.close()
     
-def register_for_event(member_id):
+def event_registration(member_id):
     # Connect to the database
-    conn = connect(**db)
-    cur = conn.cursor()
+    pg_connection = connect(**db)
+    pg_cursor = pg_connection.cursor()
 
     try:
         # Display available events
-        cur.execute("SELECT * FROM \"Classes\"")
-        events = cur.fetchall()
+        pg_cursor.execute("SELECT * FROM \"Classes\"")
+        events = pg_cursor.fetchall()
         
         if not events:
             print("No events available to register.")
@@ -836,35 +782,35 @@ def register_for_event(member_id):
             return
         
         # Register the member for the event
-        cur.execute("INSERT INTO \"ClassQueue\" (member_id, event_id) VALUES (%s, %s)", (member_id, event_id))
+        pg_cursor.execute("INSERT INTO \"ClassQueue\" (member_id, event_id) VALUES (%s, %s)", (member_id, event_id))
         print(f"\nRegistered for event {event_id} successfully.")
 
         # Retrieve and update the member's billing information
-        cur.execute("SELECT balance FROM \"Members\" WHERE member_id = %s", (member_id,))
+        pg_cursor.execute("SELECT balance FROM \"Members\" WHERE member_id = %s", (member_id,))
 
-        newBill = (cur.fetchone()[0] or float(0)) + 20 
+        newBill = (pg_cursor.fetchone()[0] or float(0)) + 20 
 
-        cur.execute("UPDATE \"Members\" SET balance = %s WHERE member_id = %s", (newBill, member_id))
+        pg_cursor.execute("UPDATE \"Members\" SET balance = %s WHERE member_id = %s", (newBill, member_id))
 
         print(f"Billing information updated: New bill is ${newBill}.")
 
         Functions.enterToContinue()
 
-        conn.commit()
+        pg_connection.commit()
 
     except Error as e:
         print(f"An error occurred: {e}")
         Functions.enterToContinue()
-        conn.rollback()
+        pg_connection.rollback()
     except ValueError:
         print("Invalid input. Please enter a valid numeric event ID.")
         Functions.enterToContinue()
-        conn.rollback()
+        pg_connection.rollback()
     finally:
-        cur.close()
-        conn.close()
+        pg_cursor.close()
+        pg_connection.close()
 
-def set_trainer_availability(conn, trainer_id):
+def set_trainer_availability(pg_connection, trainer_id):
     print("\nEnter your available date and time:")
     year = Functions.loopTillValid("Year (YYYY): ", "integer", False)
     month = Functions.loopTillValid("Month (MM): ", "integer", False)
@@ -880,12 +826,12 @@ def set_trainer_availability(conn, trainer_id):
         formatted_date = new_date.strftime('%Y-%m-%d %H:%M:%S')
 
         # Insert the formatted date into the database
-        with conn.cursor() as cur:
-            cur.execute("""
+        with pg_connection.cursor() as pg_cursor:
+            pg_cursor.execute("""
                 INSERT INTO "Dates" (trainer_id, availability) 
                 VALUES (%s, %s)
             """, (trainer_id, formatted_date))
-            conn.commit()
+            pg_connection.commit()
         print(f"Your availability date has been added: {formatted_date}.")
         Functions.enterToContinue()
     except ValueError as ve:
@@ -895,16 +841,12 @@ def set_trainer_availability(conn, trainer_id):
         print(f"Failed to update availability: {e}")
         Functions.enterToContinue()
 
-def view_member_profile(conn):
-    member_id = input("Enter the member's ID to search: ")
-    if member_id:
-        with conn.cursor() as cur:
-            cur.execute("""
-            SELECT m.* 
-            FROM "Members" m
-            WHERE m.member_id = %s
-            """, (member_id,))
-            member_details = cur.fetchone()
+def query_member(pg_connection):
+    try:
+        member_id = input("Enter the member's first name to search: ")
+        pg_cursor = pg_connection.cursor()
+        pg_cursor.execute("""SELECT m.* FROM "Members" m WHERE m.first_name = %s""", (member_id,))
+        member_details = pg_cursor.fetchone()
 
         if member_details:
             Functions.clearScreen(f"{member_details[2]}'s Profile")
@@ -922,31 +864,37 @@ def view_member_profile(conn):
 
             Functions.enterToContinue()
         else:
-            print("No member found with that first name.")
+            print("No member found with that name.")
             Functions.enterToContinue()
+    except ValueError as ve:
+        print("Invalid name.")
+        Functions.enterToContinue()
+    except Exception as e:
+        print(f"An exception occured: {e}")
+        Functions.enterToContinue()
 
-def trainer_page(user_id):
-    conn = connect(**db)
+def trainer_login(user_id):
+    pg_connection = connect(**db)
     try:
-        cur = conn.cursor()
-        cur.execute("SELECT trainer_id FROM \"Trainers\" WHERE user_id = %s", (user_id,))
-        trainer_id = cur.fetchone()[0]
+        pg_cursor = pg_connection.cursor()
+        pg_cursor.execute("SELECT trainer_id FROM \"Trainers\" WHERE user_id = %s", (user_id,))
+        trainer_id = pg_cursor.fetchone()[0]
 
         exit = False
 
         while not exit:
 
-            cur.execute("SELECT first_name FROM \"Trainers\" WHERE user_id = %s", (user_id,))
-            trainer_name = cur.fetchone()[0]
+            pg_cursor.execute("SELECT first_name FROM \"Trainers\" WHERE user_id = %s", (user_id,))
+            trainer_name = pg_cursor.fetchone()[0]
 
             Functions.clearScreen(f"{trainer_name}'s Dashboard")
 
-            cur.execute("""
+            pg_cursor.execute("""
                 SELECT availability FROM "Dates"
                 WHERE trainer_id = %s
                 ORDER BY availability
             """, (trainer_id,))
-            availabilities = cur.fetchall()
+            availabilities = pg_cursor.fetchall()
 
             if availabilities:
                 print("Your current availability:")
@@ -959,38 +907,116 @@ def trainer_page(user_id):
 
             match trainerChoice:
                 case "1":
-                    set_trainer_availability(conn, trainer_id)
+                    set_trainer_availability(pg_connection, trainer_id)
                 case "2":
-                    view_member_profile(conn)
+                    query_member(pg_connection)
                 case "3":
                     exit = True
 
     finally:
-        cur.close()
-        conn.close()
+        pg_cursor.close()
+        pg_connection.close()
 
-# Setting up the database by creating tables from DDL.sql
-def initialize():
-    conn = connect(**db)
-    cur = conn.cursor()
+def login():
+    Functions.clearScreen("Health and Fitness Management System Login")
+    username = input("Enter your username: ")
+    password = getpass("Enter your password: ")
 
-    # Open the SQL file
-    with open('./SQL/DDL.sql', 'r') as DDL:
-        cur.execute(DDL.read())
+    pg_connection = connect(**db)
+    try:
+        pg_cursor = pg_connection.cursor()
+        pg_cursor.execute("SELECT * FROM \"Users\" WHERE username = %s AND password = %s", (username, password))
+        
+        if r:= pg_cursor.fetchone():
+            match r[4]:
+                case "admin":
+                    admin_login()
+                case "member":
+                    member_login(r[0])
+                case "trainer":
+                    trainer_login(r[0])
 
-    with open('./SQL/DML.sql', 'r') as DML:
-        cur.execute(DML.read())
+            return True
+        else:
+            print("Invalid username or password")
+            Functions.enterToContinue()
+            return False
+    finally:
+        pg_cursor.close()
+        pg_connection.close()
 
-    # Commit and close
-    cur.close()
-    conn.commit()
-    conn.close()
+def register_user():
+    try:
+        # Establish database connection
+        pg_connection = connect(**db)
+        pg_cursor = pg_connection.cursor()
+
+        Functions.clearScreen("Register")
+
+        print("\nNOTE: If you are trying to register a trainer or admin account, please speak with your representative.\n")
+
+        # Collect user information
+        username = input("Enter username: ")
+        password = getpass("Enter password: ")
+        confirmPass = getpass("Confirm password: ")
+
+        if password != confirmPass:
+            Functions.clearScreen("Your passwords do not match.")
+            Functions.enterToContinue()
+            return
+        
+        email = input("Enter email: ")
+        first_name = input("Enter first name: ")
+        last_name = input("Enter last name: ")
+        fitness_goals = input("Enter fitness goals: ")
+        exercise = input("Enter exercise routine: ")
+        blood = input("Enter blood pressure: ")
+        weight = Functions.loopTillValid("Enter weight (kg): ", "integer", False)
+        height = Functions.loopTillValid("Enter height (cm): ", "integer", False)
+
+        # Insert into Users table
+        pg_cursor.execute("""
+            INSERT INTO "Users" (username, password, email, role) 
+            VALUES (%s, %s, %s, 'member') RETURNING user_id
+        """, (username, password, email))
+        user_id = pg_cursor.fetchone()[0]
+
+        # Insert into Members table
+        pg_cursor.execute("""
+            INSERT INTO "Members" (user_id, first_name, last_name, fitness_goals, exercise, balance) 
+            VALUES (%s, %s, %s, %s, %s, 0)
+        """, (user_id, first_name, last_name, fitness_goals, exercise))
+
+        # Get the generated member_id for health metrics
+        pg_cursor.execute("SELECT member_id FROM \"Members\" WHERE user_id = %s", (user_id,))
+        member_id = pg_cursor.fetchone()[0]
+
+        # Insert into Health table
+        pg_cursor.execute("""
+            INSERT INTO "Health" (member_id, blood, weight, height) 
+            VALUES (%s, %s, %s, %s)
+        """, (member_id, blood, weight, height))
+
+        pg_connection.commit()
+        print("You have successfully registered!")
+
+        Functions.enterToContinue()
+
+    except Exception as e:
+        print("Registration failed: " + str(e))
+        Functions.enterToContinue()
+        pg_connection.rollback()
+
+    finally:
+        pg_cursor.close()
+        pg_connection.close()
 
 def main():
 
-    global db
-    if len(sys.argv) < 4:
+    if len(sys.argv) != 4:
         sys.exit("Usage: python3 app.py {database} {username} {password}")
+
+    global db
     db = {
         'database': sys.argv[1],
         'user': sys.argv[2],
@@ -1000,14 +1026,11 @@ def main():
         initialize()
 
     except Exception as e:
-        sys.exit(f"Unable to setup database: {str(e)}")
+        sys.exit(f"Process exited: {e}")
     
     exit = False
-
     while not exit:
-
         userChoice = Menu("Welcome to Health and Fitness Club Management System!", "Login", "Register", "Exit").menu()
-
         match userChoice:
             case "1":
                 login()

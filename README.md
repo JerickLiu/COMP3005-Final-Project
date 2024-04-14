@@ -4,7 +4,7 @@
 The Health and Fitness Club Management System is a comprehensive application designed to cater to the needs of club members, trainers, and administrative staff. This system enables members to manage their profiles, set personal fitness goals, track exercise routines, and much more. Trainers can manage their schedules and access member profiles, while administrative staff can handle room bookings, monitor equipment, and manage billing.
 
 ## Demo
-View the demo at the following link: 
+View the demo at the following link: https://www.youtube.com/watch?v=4A_WIB4ZzSA
 
 ## Features
 - **Members**:
@@ -27,6 +27,23 @@ View the demo at the following link:
 ## Prerequisites
 - Python 3.10+
 - PostgreSQL
+
+## File Structure
+```bash
+.
+├── README.md
+├── SQL
+│   ├── DDL.sql
+│   └── DML.sql
+├── report
+│   ├── ER-Diagram.png
+│   ├── RSchema.png
+│   └── report.pdf
+└── src
+    ├── Functions.py
+    ├── app.py
+    └── menu.py
+```
 
 ## Usage
 

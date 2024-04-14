@@ -465,6 +465,116 @@ def member_login(user_id):
     pg_cursor.close()
     pg_connection.close()
 
+def mod_info(user_id):
+    # Connect to the database
+    pg_connection = connect(**db)
+    pg_cursor = pg_connection.cursor()
+
+    try:
+        # Retrieve the current details of the member
+        pg_cursor.execute("SELECT * FROM \"Members\" WHERE user_id = %s", (user_id,))
+        member_details = pg_cursor.fetchone()
+
+        # If no member is found
+        if not member_details:
+            print("No member found with the given user ID.")
+            return
+
+        # Display current member details
+        labels = ["Member ID", "First Name", "Last Name", "Fitness Goals", "Exercise", "Fitness Achievements"]
+        print("\nCurrent details:\n")
+        for i, label in enumerate(labels, start=1):
+            print(f"{label}: {member_details[i]}")
+
+        # Ask which detail to update
+        for i, label in enumerate(labels[1:], start=1):  # start from 1 to skip Member ID
+            print(f"{i}. {label}")
+        choice = int(input("Enter the number of the field you want to update: "))
+
+        # Validate choice
+        if choice < 0 or choice >= len(labels):
+            print("Invalid selection.")
+            return
+
+        # Get the new value for the field
+        new_value = input(f"Enter new value for {labels[choice]}: ")
+
+        # Update the database
+        sql_update = f"UPDATE \"Members\" SET \"{labels[choice].replace(' ', '_').lower()}\" = %s WHERE user_id = %s"
+        pg_cursor.execute(sql_update, (new_value, user_id))
+        pg_connection.commit()
+
+        print(f"\n{labels[choice]} updated successfully.")
+        Functions.enterToContinue()
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        Functions.enterToContinue()
+        pg_connection.rollback()
+    finally:
+        pg_cursor.close()
+        pg_connection.close()
+
+def mod_health(user_id):
+    # Connect to the database
+    pg_connection = connect(**db)
+    pg_cursor = pg_connection.cursor()
+
+    try:
+        # Retrieve the current health metrics of the member
+        pg_cursor.execute("SELECT member_id FROM \"Members\" WHERE user_id = %s", (user_id,))
+        member_id = pg_cursor.fetchone()
+        if not member_id:
+            print("No member found with the given user ID.")
+            return
+
+        pg_cursor.execute("SELECT * FROM \"Health\" WHERE member_id = %s", (member_id[0],))
+        health_metrics = pg_cursor.fetchone()
+
+        # If no metrics are found
+        if not health_metrics:
+            print("No health metrics found for this member.")
+            Functions.enterToContinue()
+            return
+
+        # Display current health metrics
+        labels = ["Blood Pressure", "Weight", "Height"]
+        print("Current health metrics:")
+        for i, label in enumerate(labels, start=2):  # Assuming health metrics start from index 2
+            print(f"{label}: {health_metrics[i]}")
+
+        # Ask which metric to update
+        for i, label in enumerate(labels, start=1):
+            print(f"{i}. {label}")
+        choice = int(input("Enter the number of the metric you want to update: ")) - 1
+
+        # Validate choice
+        if choice < 0 or choice >= len(labels):
+            print("Invalid selection.")
+            return
+
+        # Get the new value for the metric
+        new_value = input(f"Enter new value for {labels[choice]}: ")
+
+        # Prepare the column name based on selected label
+        column_name = labels[choice].replace("Blood Pressure", "blood").lower()
+
+        # Update the database
+        sql_update = f"UPDATE \"Health\" SET {column_name} = %s WHERE member_id = %s"
+        pg_cursor.execute(sql_update, (new_value, member_id[0]))
+        pg_connection.commit()
+
+        print(f"\n{labels[choice]} updated successfully.")
+        Functions.enterToContinue()
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        Functions.enterToContinue()
+        pg_connection.rollback()
+    finally:
+        pg_cursor.close()
+        pg_connection.close()
+
 def book_training(member_id):
     # Connect to the database
     pg_connection = connect(**db)
@@ -502,7 +612,7 @@ def book_training(member_id):
         date_id = dates[choice][0]
 
         # Schedule the session
-        schedule_session(member_id, date_id)
+        schedule_training(member_id, date_id)
 
     except Error as e:
         print(f"An error occurred: {e}")
@@ -516,7 +626,7 @@ def book_training(member_id):
         pg_cursor.close()
         pg_connection.close()
 
-def schedule_session(member_id, date_id):
+def schedule_training(member_id, date_id):
     pg_connection = connect(**db)
     pg_cursor = pg_connection.cursor()
 
@@ -643,116 +753,6 @@ def member_process_payment(member_id):
 
     Functions.enterToContinue()
 
-
-def mod_info(user_id):
-    # Connect to the database
-    pg_connection = connect(**db)
-    pg_cursor = pg_connection.cursor()
-
-    try:
-        # Retrieve the current details of the member
-        pg_cursor.execute("SELECT * FROM \"Members\" WHERE user_id = %s", (user_id,))
-        member_details = pg_cursor.fetchone()
-
-        # If no member is found
-        if not member_details:
-            print("No member found with the given user ID.")
-            return
-
-        # Display current member details
-        labels = ["Member ID", "First Name", "Last Name", "Fitness Goals", "Exercise", "Fitness Achievements"]
-        print("\nCurrent details:\n")
-        for i, label in enumerate(labels, start=1):
-            print(f"{label}: {member_details[i]}")
-
-        # Ask which detail to update
-        for i, label in enumerate(labels[1:], start=1):  # start from 1 to skip Member ID
-            print(f"{i}. {label}")
-        choice = int(input("Enter the number of the field you want to update: "))
-
-        # Validate choice
-        if choice < 0 or choice >= len(labels):
-            print("Invalid selection.")
-            return
-
-        # Get the new value for the field
-        new_value = input(f"Enter new value for {labels[choice]}: ")
-
-        # Update the database
-        sql_update = f"UPDATE \"Members\" SET \"{labels[choice].replace(' ', '_').lower()}\" = %s WHERE user_id = %s"
-        pg_cursor.execute(sql_update, (new_value, user_id))
-        pg_connection.commit()
-
-        print(f"\n{labels[choice]} updated successfully.")
-        Functions.enterToContinue()
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        Functions.enterToContinue()
-        pg_connection.rollback()
-    finally:
-        pg_cursor.close()
-        pg_connection.close()
-
-def mod_health(user_id):
-    # Connect to the database
-    pg_connection = connect(**db)
-    pg_cursor = pg_connection.cursor()
-
-    try:
-        # Retrieve the current health metrics of the member
-        pg_cursor.execute("SELECT member_id FROM \"Members\" WHERE user_id = %s", (user_id,))
-        member_id = pg_cursor.fetchone()
-        if not member_id:
-            print("No member found with the given user ID.")
-            return
-
-        pg_cursor.execute("SELECT * FROM \"Health\" WHERE member_id = %s", (member_id[0],))
-        health_metrics = pg_cursor.fetchone()
-
-        # If no metrics are found
-        if not health_metrics:
-            print("No health metrics found for this member.")
-            Functions.enterToContinue()
-            return
-
-        # Display current health metrics
-        labels = ["Blood Pressure", "Weight", "Height"]
-        print("Current health metrics:")
-        for i, label in enumerate(labels, start=2):  # Assuming health metrics start from index 2
-            print(f"{label}: {health_metrics[i]}")
-
-        # Ask which metric to update
-        for i, label in enumerate(labels, start=1):
-            print(f"{i}. {label}")
-        choice = int(input("Enter the number of the metric you want to update: ")) - 1
-
-        # Validate choice
-        if choice < 0 or choice >= len(labels):
-            print("Invalid selection.")
-            return
-
-        # Get the new value for the metric
-        new_value = input(f"Enter new value for {labels[choice]}: ")
-
-        # Prepare the column name based on selected label
-        column_name = labels[choice].replace("Blood Pressure", "blood").lower()
-
-        # Update the database
-        sql_update = f"UPDATE \"Health\" SET {column_name} = %s WHERE member_id = %s"
-        pg_cursor.execute(sql_update, (new_value, member_id[0]))
-        pg_connection.commit()
-
-        print(f"\n{labels[choice]} updated successfully.")
-        Functions.enterToContinue()
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        Functions.enterToContinue()
-        pg_connection.rollback()
-    finally:
-        pg_cursor.close()
-        pg_connection.close()
     
 def event_registration(member_id):
     # Connect to the database
@@ -806,6 +806,50 @@ def event_registration(member_id):
         print("Invalid input. Please enter a valid numeric event ID.")
         Functions.enterToContinue()
         pg_connection.rollback()
+    finally:
+        pg_cursor.close()
+        pg_connection.close()
+
+def trainer_login(user_id):
+    pg_connection = connect(**db)
+    try:
+        pg_cursor = pg_connection.cursor()
+        pg_cursor.execute("SELECT trainer_id FROM \"Trainers\" WHERE user_id = %s", (user_id,))
+        trainer_id = pg_cursor.fetchone()[0]
+
+        exit = False
+
+        while not exit:
+
+            pg_cursor.execute("SELECT first_name FROM \"Trainers\" WHERE user_id = %s", (user_id,))
+            trainer_name = pg_cursor.fetchone()[0]
+
+            Functions.clearScreen(f"{trainer_name}'s Dashboard")
+
+            pg_cursor.execute("""
+                SELECT availability FROM "Dates"
+                WHERE trainer_id = %s
+                ORDER BY availability
+            """, (trainer_id,))
+            availabilities = pg_cursor.fetchall()
+
+            if availabilities:
+                print("Your current availability:")
+                for availability in availabilities:
+                    print(f"- {availability[0].strftime('%Y-%m-%d %H:%M:%S')}")
+            else:
+                print("No current availability set.")
+
+            trainerChoice = Menu("", "Set Availability", "View Member Profile", "Logout").menu(False)
+
+            match trainerChoice:
+                case "1":
+                    set_trainer_availability(pg_connection, trainer_id)
+                case "2":
+                    query_member(pg_connection)
+                case "3":
+                    exit = True
+
     finally:
         pg_cursor.close()
         pg_connection.close()
@@ -872,50 +916,6 @@ def query_member(pg_connection):
     except Exception as e:
         print(f"An exception occured: {e}")
         Functions.enterToContinue()
-
-def trainer_login(user_id):
-    pg_connection = connect(**db)
-    try:
-        pg_cursor = pg_connection.cursor()
-        pg_cursor.execute("SELECT trainer_id FROM \"Trainers\" WHERE user_id = %s", (user_id,))
-        trainer_id = pg_cursor.fetchone()[0]
-
-        exit = False
-
-        while not exit:
-
-            pg_cursor.execute("SELECT first_name FROM \"Trainers\" WHERE user_id = %s", (user_id,))
-            trainer_name = pg_cursor.fetchone()[0]
-
-            Functions.clearScreen(f"{trainer_name}'s Dashboard")
-
-            pg_cursor.execute("""
-                SELECT availability FROM "Dates"
-                WHERE trainer_id = %s
-                ORDER BY availability
-            """, (trainer_id,))
-            availabilities = pg_cursor.fetchall()
-
-            if availabilities:
-                print("Your current availability:")
-                for availability in availabilities:
-                    print(f"- {availability[0].strftime('%Y-%m-%d %H:%M:%S')}")
-            else:
-                print("No current availability set.")
-
-            trainerChoice = Menu("", "Set Availability", "View Member Profile", "Logout").menu(False)
-
-            match trainerChoice:
-                case "1":
-                    set_trainer_availability(pg_connection, trainer_id)
-                case "2":
-                    query_member(pg_connection)
-                case "3":
-                    exit = True
-
-    finally:
-        pg_cursor.close()
-        pg_connection.close()
 
 def login():
     Functions.clearScreen("Health and Fitness Management System Login")
@@ -1012,11 +1012,11 @@ def register_user():
         pg_connection.close()
 
 def main():
-
     if len(sys.argv) != 4:
         sys.exit("Usage: python3 app.py {database} {username} {password}")
 
     global db
+    
     db = {
         'database': sys.argv[1],
         'user': sys.argv[2],
